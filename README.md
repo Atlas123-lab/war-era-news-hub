@@ -1,2 +1,2 @@
-# war-era-news-hub
-War Era automated news
+# War Era News Hub
+Automated news collector and Discord notifier for War Era via GitHub Actions.
