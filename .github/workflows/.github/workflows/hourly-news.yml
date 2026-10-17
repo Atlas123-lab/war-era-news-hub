@@ -1,24 +1,53 @@
-name: Hourly War Era News
+import os
+import json
+import urllib.request
+import urllib.error
 
-on:
-  schedule:
-    - cron: '0 * * * *'
-  workflow_dispatch:
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
+STATE_FILE = "state.json"
+API_URL = "https://gateway.warerastats.io/"
 
-jobs:
-  run-news:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+def load_state():
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"seen_ids": []}
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+def save_state(state):
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
 
-      - name: Run news script
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: |
-          python news_hub.py
+def send_discord(message):
+    if not DISCORD_WEBHOOK_URL:
+        print("Error: DISCORD_WEBHOOK_URL is not set in Secrets!")
+        return
+    data = json.dumps({"content": message}).encode("utf-8")
+    req = urllib.request.Request(
+        DISCORD_WEBHOOK_URL,
+        data=data,
+        headers={"Content-Type": "application/json", "User-Agent": "WarEraBot/1.0"}
+    )
+    try:
+        with urllib.request.urlopen(req) as response:
+            print(f"Webhook sent successfully! Status code: {response.status}")
+    except Exception as e:
+        print(f"Error sending to Discord: {e}")
+
+def main():
+    print("Running War Era News Hub check...")
+    
+    # رسالة تجريبية تأكيدية لـ Discord
+    send_discord("🚀 **War Era News Hub Bot is live!**\nتم الاتصال بـ GitHub Actions بنجاح. النظام جاهز لإرسال آخر أخبار وأحداث اللعبة!")
+    
+    try:
+        req = urllib.request.Request(API_URL, headers={"User-Agent": "WarEraBot/1.0"})
+        with urllib.request.urlopen(req) as response:
+            print("Successfully connected to War Era Gateway.")
+    except Exception as e:
+        print(f"Failed to fetch gateway: {e}")
+
+if __name__ == "__main__":
+    main()
