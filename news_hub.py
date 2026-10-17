@@ -20,9 +20,27 @@ def save_state(state):
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
 
+def send_discord(message):
+    if not DISCORD_WEBHOOK_URL:
+        print("Error: DISCORD_WEBHOOK_URL is not set in Secrets!")
+        return
+    data = json.dumps({"content": message}).encode("utf-8")
+    req = urllib.request.Request(
+        DISCORD_WEBHOOK_URL,
+        data=data,
+        headers={"Content-Type": "application/json", "User-Agent": "WarEraBot/1.0"}
+    )
+    try:
+        with urllib.request.urlopen(req) as response:
+            print(f"Webhook sent successfully! Status code: {response.status}")
+    except Exception as e:
+        print(f"Error sending to Discord: {e}")
+
 def main():
     print("Running War Era News Hub check...")
-    state = load_state()
+    
+    # إرسال رسالة مباشرة لتأكيد الربط مع Discord
+    send_discord("🚀 **War Era News Hub Bot is live!**\nتم الاتصال بـ GitHub Actions بنجاح. النظام جاهز لإرسال الأخبار!")
     
     try:
         req = urllib.request.Request(API_URL, headers={"User-Agent": "WarEraBot/1.0"})
