@@ -1,12 +1,75 @@
-def main():
-    print("Checking for new War Era events...")
-    state = load_state()
-    seen_ids = set(state.get("seen_ids", []))
+import os
+import json
+import urllib.request
+import urllib.error
+
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
+STATE_FILE = "state.json"
+
+# رابط API الأحداث والأخبار لـ War Era
+API_URL = "https://gateway.warerastats.io/trpc/event.getEventsPaginated?batch=1&input=%7B%220%22%3A%7B%22json%22%3A%7B%22page%22%3A1%2C%22limit%22%3A5%7D%7D%7D"
+
+def send_discord_embed(title, description, color=0x3498db):
+    if not DISCORD_WEBHOOK_URL:
+        print("Error: DISCORD_WEBHOOK_URL not set.")
+        return
     
+    payload = {
+        "embeds": [
+            {
+                "title": title,
+                "description": description,
+                "color": color,
+                "footer": {"text": "War Era News Hub • Live Feed"}
+            }
+        ]
+    }
+    
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        DISCORD_WEBHOOK_URL,
+        data=data,
+        headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
+    )
+    try:
+        with urllib.request.urlopen(req) as response:
+            print(f"Webhook sent successfully: {response.status}")
+    except Exception as e:
+        print(f"Error sending embed: {e}")
+
+def fetch_events():
+    req = urllib.request.Request(API_URL, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req) as response:
+            if response.status == 200:
+                raw_data = response.read().decode("utf-8")
+                data = json.loads(raw_data)
+                
+                if isinstance(data, list) and len(data) > 0:
+                    items = data[0].get("result", {}).get("data", {}).get("json", {}).get("items", [])
+                    return items
+                elif isinstance(data, dict):
+                    items = data.get("result", {}).get("data", {}).get("json", {}).get("items", [])
+                    return items
+    except Exception as e:
+        print(f"Error fetching tRPC API: {e}")
+    return []
+
+def main():
+    print("Force fetching War Era events for test...")
     events = fetch_events()
     
-    # إلى لقيتِ أحداث فـ Gateway ولكن كلها مسجلة فـ state.json، صيفط تنبيه تأكيدي
     if not events:
-        send_discord_embed("📡 [فحص Gateway]", "تم الاتصال بالواجهة ولكن لا توجد أحداث حصرية حالياً.")
-    else:
-        send_discord_embed("📡 [تم جلب البيانات]", f"تم العثور على {len(events)} حدثاً في سيرفر اللعبة!")
+        # في حال كانت القائمة فارغة أو مسار البيانات يتطلب استخراجاً آخر
+        send_discord_embed("📡 [تنبيه الفحص]", "تم الاتصال بالـ Gateway وجاري استخراج التحديثات الجديدة...")
+        return
+
+    # إرسال أحدث الأحداث المتاحة فوراً لإثبات الوصول
+    for ev in events[:3]:
+        title = ev.get("title") or ev.get("name") or "حدث جديد في War Era ⚔️"
+        description = ev.get("description") or ev.get("summary") or "تم تسجيل تحديث جديد داخل اللعبة."
+        
+        send_discord_embed(f"⚔️ {title}", description)
+
+if __name__ == "__main__":
+    main()
