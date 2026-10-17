@@ -5,26 +5,38 @@ import urllib.error
 
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 STATE_FILE = "state.json"
-API_URL = "https://gateway.warerastats.io/"
+API_URL = "https://gateway.warerastats.io/events"  # أو رابط الأحداث الخاص بالـ Gateway
 
 def load_state():
     if os.path.exists(STATE_FILE):
         try:
-            with open(STATE_FILE, "r") as f:
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
     return {"seen_ids": []}
 
 def save_state(state):
-    with open(STATE_FILE, "w") as f:
-        json.dump(state, f, indent=2)
+    with open(STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2, ensure_ascii=False)
 
-def send_discord(message):
+def send_discord_embed(title, description, color=0x3498db):
     if not DISCORD_WEBHOOK_URL:
-        print("Error: DISCORD_WEBHOOK_URL is not set in Secrets!")
+        print("Error: DISCORD_WEBHOOK_URL not set.")
         return
-    data = json.dumps({"content": message}).encode("utf-8")
+    
+    payload = {
+        "embeds": [
+            {
+                "title": title,
+                "description": description,
+                "color": color,
+                "footer": {"text": "War Era News Hub • Automated Bot"}
+            }
+        ]
+    }
+    
+    data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         DISCORD_WEBHOOK_URL,
         data=data,
@@ -32,22 +44,56 @@ def send_discord(message):
     )
     try:
         with urllib.request.urlopen(req) as response:
-            print(f"Webhook sent successfully! Status code: {response.status}")
+            print(f"Notification sent successfully: {response.status}")
     except Exception as e:
-        print(f"Error sending to Discord: {e}")
+        print(f"Error sending embed to Discord: {e}")
+
+def fetch_gateway_data():
+    req = urllib.request.Request(API_URL, headers={"User-Agent": "WarEraBot/1.0"})
+    try:
+        with urllib.request.urlopen(req) as response:
+            if response.status == 200:
+                data = response.read().decode("utf-8")
+                return json.loads(data)
+    except Exception as e:
+        print(f"Error fetching data from Gateway: {e}")
+    return None
 
 def main():
-    print("Running War Era News Hub check...")
+    print("Checking for new War Era events...")
+    state = load_state()
+    seen_ids = set(state.get("seen_ids", []))
     
-    # إرسال رسالة مباشرة لتأكيد الربط مع Discord
-    send_discord("🚀 **War Era News Hub Bot is live!**\nتم الاتصال بـ GitHub Actions بنجاح. النظام جاهز لإرسال الأخبار!")
+    events_data = fetch_gateway_data()
     
-    try:
-        req = urllib.request.Request(API_URL, headers={"User-Agent": "WarEraBot/1.0"})
-        with urllib.request.urlopen(req) as response:
-            print("Successfully connected to War Era Gateway.")
-    except Exception as e:
-        print(f"Failed to fetch gateway: {e}")
+    if not events_data:
+        print("No new data fetched or connection failed.")
+        return
+
+    # معالجة الأحداث الجديدة
+    new_events_found = 0
+    # افترضنا هنا أن الاستجابة مصفوفة من الأحداث أو كائن يحتوي على events
+    events_list = events_data if isinstance(events_data, list) else events_data.get("events", [])
+
+    for event in events_list:
+        event_id = str(event.get("id"))
+        if not event_id or event_id in seen_ids:
+            continue
+        
+        # استخراج تفاصيل الحدث
+        title = event.get("title", "حدث جديد في War Era ⚔️")
+        description = event.get("description", "تفاصيل الحدث غير متوفرة حالياً.")
+        
+        # إرسال التنبيه لـ Discord
+        send_discord_embed(title, description)
+        
+        seen_ids.add(event_id)
+        new_events_found += 1
+
+    # حفظ الأحداث المعالجة
+    state["seen_ids"] = list(seen_ids)
+    save_state(state)
+    print(f"Processed {new_events_found} new events.")
 
 if __name__ == "__main__":
     main()
