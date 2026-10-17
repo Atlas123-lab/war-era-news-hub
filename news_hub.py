@@ -6,7 +6,7 @@ import urllib.error
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 STATE_FILE = "state.json"
 
-# رابط API الأحداث والأخبار لـ War Era
+# رابط API الأحداث والأخبار الخاص بـ War Era
 API_URL = "https://gateway.warerastats.io/trpc/event.getEventsPaginated?batch=1&input=%7B%220%22%3A%7B%22json%22%3A%7B%22page%22%3A1%2C%22limit%22%3A10%7D%7D%7D"
 
 def load_state():
@@ -46,7 +46,7 @@ def send_discord_embed(title, description, color=0x3498db):
     )
     try:
         with urllib.request.urlopen(req) as response:
-            print(f"Webhook sent: {response.status}")
+            print(f"Webhook sent successfully: {response.status}")
     except Exception as e:
         print(f"Error sending embed: {e}")
 
@@ -62,4 +62,37 @@ def fetch_events():
                     items = data[0].get("result", {}).get("data", {}).get("json", {}).get("items", [])
                     return items
                 elif isinstance(data, dict):
-                    items = data.get("result", {}).get("data",
+                    items = data.get("result", {}).get("data", {}).get("json", {}).get("items", [])
+                    return items
+    except Exception as e:
+        print(f"Error fetching tRPC API: {e}")
+    return []
+
+def main():
+    print("Checking for new War Era events...")
+    state = load_state()
+    seen_ids = set(state.get("seen_ids", []))
+    
+    events = fetch_events()
+    new_events_count = 0
+
+    for ev in events:
+        ev_id = str(ev.get("id") or ev.get("_id") or ev.get("code"))
+        if not ev_id or ev_id in seen_ids:
+            continue
+        
+        # استخراج العنوان والتفاصيل المباشرة لأخبار وأحداث الدول في اللعبة
+        title = ev.get("title") or ev.get("name") or "حدث جديد في War Era ⚔️"
+        description = ev.get("description") or ev.get("summary") or "تم تسجيل حدث جديد في سيرفر اللعبة."
+        
+        # إرسال التنبيه لكل خبر جديد
+        send_discord_embed(f"⚔️ {title}", description)
+        seen_ids.add(ev_id)
+        new_events_count += 1
+    
+    state["seen_ids"] = list(seen_ids)
+    save_state(state)
+    print(f"Check finished. New events sent: {new_events_count}")
+
+if __name__ == "__main__":
+    main()
